@@ -263,3 +263,5 @@ __pycache__/
 /Web/Edrington.Gateway.Web/dist/**/*
 /Api/Edrington.Consumer.Api.Tests/Edrington.Consumer.Api.Tests.v3.ncrunchproject
 *.diff
+
+.env

@@ -3,9 +3,10 @@
     using Microsoft.Azure.ServiceBus;
     using System;
     using System.Collections.Generic;
+    using System.IO;
     using System.Linq;
     using System.Runtime.InteropServices;
-    using System.Runtime.InteropServices.WindowsRuntime;
+  	// using System.Runtime.InteropServices.WindowsRuntime;
     using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
@@ -25,6 +26,10 @@
 
         static void Main(string[] args)
         {
+            var root = Directory.GetCurrentDirectory();
+            var dotenv = Path.Combine(root, ".env");
+            DotEnv.Load(dotenv);
+
             MainAsync().GetAwaiter().GetResult();
         }
 
@@ -32,12 +37,13 @@
         {
             // PROD error queue
             _client = new QueueClient(
-                "--PROD SERVICE BUS CONNECTION STRING HERE--",
-               "error", receiveMode: ReceiveMode.PeekLock);
+               Environment.GetEnvironmentVariable("PRODUCTION_CONNECTION_STRING"),
+               "error",
+               receiveMode: ReceiveMode.PeekLock);
 
             // QA
             //_client = new QueueClient(
-            //    "--QA SERVICE BUS CONNECTION STRING HERE--",
+            //    Environment.GetEnvironmentVariable("QA_CONNECTION_STRING"),
             //    "error", ReceiveMode.PeekLock);
 
             _actions = new Dictionary<string, Func<Message, Task>>();
