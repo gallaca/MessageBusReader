@@ -1,19 +1,17 @@
 ﻿namespace MessageBusReader
 {
-    using Microsoft.Azure.ServiceBus;
     using System;
     using System.Collections.Generic;
     using System.IO;
     using System.Linq;
-    using System.Runtime.InteropServices;
-    // using System.Runtime.InteropServices.WindowsRuntime;
     using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
     using Newtonsoft.Json;
     using Newtonsoft.Json.Linq;
+    using Microsoft.Azure.ServiceBus;
 
-    class Program
+    public class Program
     {
         private static QueueClient _client;
         private static TaskCompletionSource<int> _taskCompletionSource;
@@ -43,7 +41,7 @@
         static async Task MainAsync()
         {
             string env;
-            env = "PRODUCTION_CONNECTION_STRING";
+             env = "PRODUCTION_CONNECTION_STRING";
             // env = "QA_CONNECTION_STRING";
             // env = "DEV_CONNECTION_STRING";
             _connectionString = Environment.GetEnvironmentVariable(env);
@@ -133,50 +131,28 @@
                 _typeCounter[type] = 1;
             }
 
-
-            var invalidMessageIds = new[] 
-            {
-                "bdc917fd-421b-4430-9c1c-811d6d68ce75",
-                "21e1eee8-ae95-4ae9-bce4-74329a4f1d17",
-                "c62a2678-3011-468b-8755-05e229cd31b9",
-                "dee86d70-6ffe-4a9f-8428-0690b0492021",
-                "22cb68db-b6d0-41b2-819c-69e5f632c44e",
-                "77bf5c41-3993-45fc-a6e9-f7ab7aaf45d7",
-                "849d7333-cbbd-4f2c-8b63-a2fd2d937de9",
-                "da0c6258-8129-4a1e-953b-1bb6e098cb5f",
-                "edb06856-d42e-4f9f-bae4-60fcdede499d",
-                "4cfd339a-f015-4c0d-9da6-eba076b0eb46",
-                "5ccbafd2-2422-450f-8cc9-88f1a76f24ba",
-                "8229f17d-c29d-4651-a15f-8ae219d06345",
-                "dc06949c-3a1f-4b64-b60e-798ea7c88065",
-                "7d303413-589c-4093-9dc8-a35a2a2bba77",
-                "ee8097c4-6c29-4efe-ad2c-8833c4caf3f4",
-                "38aae04d-d522-4055-9ff5-1a303a1dd7b5",
-                "54bd76e3-863b-4ed8-994c-7977b6d92e70",
-                "d48be53e-48f8-4d92-b2bb-870274afcd78",
-                "d6055acc-4b65-4cb4-94fd-6dea58c45a60",
-                "08961e7e-a9b7-437b-ad86-7877499898ad",
-                "1e75eea6-a364-4f5c-9c76-f5236829d5c2",
-                "2250f5dc-63b8-4b71-8c68-7e80a9c2e19e",
-                "92b01dda-38fc-4d69-a533-85479b11966b"
-            };
-
             string[] types =
             {
+                "Edrington.Data.Authentication.Events.AuthenticationUserDeleted, Edrington.Data",
+                "Edrington.Data.Consumer.Commands.EnterBallot, Edrington.Data",
+                "Edrington.Data.Consumer.Commands.UpdateCommunicationPreferences, Edrington.Data",
                 "Edrington.Data.Consumer.Events.ConsumerConsentPreferencesUpdated, Edrington.Data",
                 "Edrington.Data.Consumer.Events.ConsumerCrmPreferencesUpdated, Edrington.Data",
-                "Edrington.Data.Consumer.Events.ProductEnquiryMade, Edrington.Data",
-                "Edrington.Data.Consumer.Commands.SendNewsletterSubscriptionRequested, Edrington.Data",
-                "Edrington.Data.Consumer.Commands.SynchroniseCrmPreferences, Edrington.Data",
-                "Edrington.Data.Consumer.Commands.SynchroniseConsentPreferences, Edrington.Data",
-                "Edrington.Data.Consumer.Commands.UpdateCommunicationPreferences, Edrington.Data",
-                "Edrington.Data.Crm.Commands.AssociateConsentWithCrmAccount, Edrington.Data",
-                "Edrington.Data.Crm.Commands.CreateCrmContact, Edrington.Data",
-                "Edrington.Data.Crm.Commands.SendConsentManagerIdToCrm, Edrington.Data",
-                "Edrington.Data.Crm.Events.ConsentAssociatedWithCrmAccount, Edrington.Data",
-                "Edrington.Data.Ecommerce.Events.ProductUpserted, Edrington.Data",
-                "Edrington.Data.Order.Events.OrderRefreshFromShopDownloadedV2, Edrington.Data",
-                //"Edrington.Data.CrmBridge.Commands.SyncPurchase, Edrington.Data"
+                "Edrington.Data.Consumer.Events.ConsumerVerifiedEmail, Edrington.Data",
+                "Edrington.Data.Consumer.Events.SignUpConsumerAccountIdentityCreated, Edrington.Data",
+                "Edrington.Data.Consumer.Events.SignUpConsumerAccountRequestExpired, Edrington.Data",
+                "Edrington.Data.MakeTheCut.Events.MakeTheCutAnswersUpdated, Edrington.Data"
+                // "Edrington.Data.Consumer.Events.ProductEnquiryMade, Edrington.Data",
+                // "Edrington.Data.Consumer.Commands.SendNewsletterSubscriptionRequested, Edrington.Data",
+                // "Edrington.Data.Consumer.Commands.SynchroniseCrmPreferences, Edrington.Data",
+                // "Edrington.Data.Consumer.Commands.SynchroniseConsentPreferences, Edrington.Data",
+                // "Edrington.Data.Crm.Commands.AssociateConsentWithCrmAccount, Edrington.Data",
+                // "Edrington.Data.Crm.Commands.CreateCrmContact, Edrington.Data",
+                // "Edrington.Data.Crm.Commands.SendConsentManagerIdToCrm, Edrington.Data",
+                // "Edrington.Data.Crm.Events.ConsentAssociatedWithCrmAccount, Edrington.Data",
+                // "Edrington.Data.Ecommerce.Events.ProductUpserted, Edrington.Data",
+                // "Edrington.Data.Order.Events.OrderRefreshFromShopDownloadedV2, Edrington.Data",
+                // "Edrington.Data.CrmBridge.Commands.SyncPurchase, Edrington.Data"
             };
 
             var body = Encoding.UTF8.GetString(message.Body);
@@ -185,37 +161,151 @@
             var atUtc = json.GetValue("AtUtc").Value<DateTime>();
             var entityId = json.GetValue("EntityId").Value<string>();
 
-
-            if (invalidMessageIds.Contains(message.MessageId))
+            if (types.Length == 0 || types.Contains(type))
             {
-                Console.WriteLine("******");
-                Console.WriteLine("Deleting message...");
-                await Task.Delay(1000, token);
-                await CompleteMessage(message);
-            }
-            else if (types.Length == 0 || types.Contains(type))
-            {
-                if (type == "Edrington.Data.Consumer.Commands.SendNewsletterSubscriptionRequested, Edrington.Data" && brand != 1)
+                if (type == "Edrington.Data.Authentication.Events.AuthenticationUserDeleted, Edrington.Data")
                 {
-                    Console.WriteLine("******");
-                    Console.WriteLine($"Skipping message {message.MessageId} to source for {entityId} and brand {brand}");
+                    if (atUtc > new DateTime(2023, 07, 24, 23, 59, 59))
+                    {
+                        Console.WriteLine("*** FOUND NEW AuthenticationUserDeleted PROBLEM!");
+                    }
+                    else
+                    {
+                        await _client.CompleteAsync(message.SystemProperties.LockToken);
+                        Console.WriteLine("## DELETED ##");
+                    }
                 }
-                else
-                {  
+
+                if (type == "Edrington.Data.Consumer.Events.ConsumerVerifiedEmail, Edrington.Data")
+                {
+                    Log($"{type}, {message.MessageId}, {atUtc}, {entityId}, {brand}, {DateTime.UtcNow}");
+                    Console.WriteLine("******");
+
+                    var sourceQueue = message.UserProperties["rbs2-source-queue"] as string;
+
+                    if (sourceQueue == "marketingemailprovider")
+                    {
+                        Console.WriteLine($"Send message {message.MessageId} to `crmprovider` for {entityId} and brand {brand}");
+                        await RedirectToQueue(message, "crmprovider");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Return message {message.MessageId} to source for {entityId} and brand {brand}");
+                        await ReturnToSource(message);
+                    }
+
+                    await Task.Delay(50, token);
+                }
+
+                if (type == "Edrington.Data.MakeTheCut.Events.MakeTheCutAnswersUpdated, Edrington.Data")
+                {
+                    var country = json.SelectToken("UpdateDto.Answers.mmj_language_country")?.Value<string>() ?? string.Empty;
+                    var how_much_have_you_explored_the_world_of_whisky = json.SelectToken("UpdateDto.Answers.how_much_have_you_explored_the_world_of_whisky_")?.Value<string>() ?? string.Empty;
+                    var whiskies_owned = json.SelectToken("UpdateDto.Answers.whiskies_owned")?.Value<string>() ?? string.Empty;
+                    var whiskies_purchased_regularly = json.SelectToken("UpdateDto.Answers.whiskies_purchased_regularly")?.Value<string>() ?? string.Empty;
+                    var do_people_ask_your_advice_about_whisky = json.SelectToken("UpdateDto.Answers.do_people_ask_your_advice_about_whisky_")?.Value<string>() ?? string.Empty;
+                    var how_often_do_you_buy_the_macallan_from_a_shop = json.SelectToken("UpdateDto.Answers.how_often_do_you_buy_the_macallan_from_a_shop_")?.Value<string>() ?? string.Empty;
+
+                    if (brand == 1 && (country == "de-de" || country == "en-gb"))
+                    {
+                        if (how_much_have_you_explored_the_world_of_whisky == "male" ||
+                            how_much_have_you_explored_the_world_of_whisky == "female" ||
+                            whiskies_owned == "['MAC400','MAC031','MAC032',]" ||
+                            whiskies_owned == "['MAC189', 'MAC042', 'MAC311']" ||
+                            whiskies_purchased_regularly == "['MAC213','MAC318','MAC034',]" ||
+                            do_people_ask_your_advice_about_whisky == "no_developing" ||
+                            do_people_ask_your_advice_about_whisky == "no_looking" ||
+                            do_people_ask_your_advice_about_whisky == "yes_settled" ||
+                            do_people_ask_your_advice_about_whisky == "yes_developed" ||
+                            how_often_do_you_buy_the_macallan_from_a_shop == "neat" ||
+                            how_often_do_you_buy_the_macallan_from_a_shop == "ice" ||
+                            how_often_do_you_buy_the_macallan_from_a_shop == "mixed" ||
+                            how_often_do_you_buy_the_macallan_from_a_shop == "mix" ||
+                            how_often_do_you_buy_the_macallan_from_a_shop == "water")
+                        {
+                            // Save the message to the file system
+                            var filename = Path.Combine(@"C:\Users\agallacher\OneDrive - Edrington\Documents\Support\invalid-bot-mtc-calls-4", $"{entityId}_{message.MessageId}.txt");
+                            File.WriteAllText(filename, json.ToString(formatting: Formatting.Indented));
+
+                            await _client.CompleteAsync(message.SystemProperties.LockToken);
+                        }
+                    }
+                }
+
+                if (type == "Edrington.Data.Consumer.Commands.EnterBallot, Edrington.Data")
+                {
+                    var errorMessage = message.UserProperties["rbs2-error-details"] as string;
+                    var botScore = json.GetValue("BotScore").Value<double>();
+
+                    if (errorMessage.Contains("Ballot criteria not met") || botScore < 0.3)
+                    {
+                        await _client.CompleteAsync(message.SystemProperties.LockToken);
+                    }
+                }
+
+                if (type == "Edrington.Data.Consumer.Events.ConsumerConsentPreferencesUpdated, Edrington.Data" ||
+                     type == "Edrington.Data.Consumer.Events.ConsumerCrmPreferencesUpdated, Edrington.Data" ||
+                     type == "Edrington.Data.Consumer.Commands.UpdateCommunicationPreferences, Edrington.Data")
+                {
                     Log($"{type}, {message.MessageId}, {atUtc}, {entityId}, {brand}, {DateTime.UtcNow}");
 
                     Console.WriteLine("******");
                     Console.WriteLine($"Return message {message.MessageId} to source for {entityId} and brand {brand}");
 
-                    // --- await CompleteMessage(message);
                     await ReturnToSource(message);
-                    await Task.Delay(1000, token);
-
-                    Console.WriteLine("Done.");
-                    Console.WriteLine();
-                    _counter++;
+                    await Task.Delay(100, token);
                 }
+
+                // Delete this old message type 
+                if (type == "Edrington.Data.Consumer.Events.SignUpConsumerAccountRequestExpired, Edrington.Data")
+                {
+                    await _client.CompleteAsync(message.SystemProperties.LockToken);
+                    Console.WriteLine("## DELETED ##");
+                }
+
+                if (type == "Edrington.Data.Consumer.Events.SignUpConsumerAccountIdentityCreated, Edrington.Data")
+                {
+                    var errorMessage = message.UserProperties["rbs2-error-details"] as string;
+                    if (errorMessage.Contains("The added or subtracted value results in an un-representable DateTime"))
+                    {
+                        await _client.CompleteAsync(message.SystemProperties.LockToken);
+                        Console.WriteLine("## DELETED ##");
+                    }
+                }
+
+                _counter++;
             }
+
+            //if (invalidMessageIds.Contains(message.MessageId))
+            //{
+            //    Console.WriteLine("******");
+            //    Console.WriteLine("Deleting message...");
+            //    await Task.Delay(1000, token);
+            //    await CompleteMessage(message);
+            //}
+            //else if (types.Length == 0 || types.Contains(type))
+            //{
+            //    if (type == "Edrington.Data.Consumer.Commands.SendNewsletterSubscriptionRequested, Edrington.Data" && brand != 1)
+            //    {
+            //        Console.WriteLine("******");
+            //        Console.WriteLine($"Skipping message {message.MessageId} to source for {entityId} and brand {brand}");
+            //    }
+            //    else
+            //    {  
+            //        Log($"{type}, {message.MessageId}, {atUtc}, {entityId}, {brand}, {DateTime.UtcNow}");
+
+            //        Console.WriteLine("******");
+            //        Console.WriteLine($"Return message {message.MessageId} to source for {entityId} and brand {brand}");
+
+            //        // --- await CompleteMessage(message);
+            //        await ReturnToSource(message);
+            //        await Task.Delay(1000, token);
+
+            //        Console.WriteLine("Done.");
+            //        Console.WriteLine();
+            //        _counter++;
+            //    }
+            //}
         }
 
         private static void ReportTypeCounters()
@@ -304,11 +394,12 @@
                 return;
             }
 
-            string source = sourceValue.ToString();
+            await RedirectToQueue(message, (string)sourceValue);
+        }
 
-            var client = new QueueClient(
-                _connectionString,
-                source);
+        private static async Task RedirectToQueue(Message message, string queueName)
+        {
+            var client = new QueueClient(_connectionString, queueName);
 
             var copy = message.Clone();
 
