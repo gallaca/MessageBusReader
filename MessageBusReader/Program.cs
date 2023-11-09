@@ -10,6 +10,7 @@
     using Newtonsoft.Json;
     using Newtonsoft.Json.Linq;
     using Microsoft.Azure.ServiceBus;
+    using Microsoft.IdentityModel.Tokens;
 
     public class Program
     {
@@ -23,6 +24,7 @@
         private static string _connectionString;
         private static Dictionary<string, Func<Message, Task>> _actions;
         private static string _logFilename;
+        private static IHelper _helper;
 
         private static DateTime _startDate = DateTime.UtcNow;
 
@@ -41,8 +43,8 @@
         static async Task MainAsync()
         {
             string env;
-             env = "PRODUCTION_CONNECTION_STRING";
-            // env = "QA_CONNECTION_STRING";
+            // env = "PRODUCTION_CONNECTION_STRING";
+             env = "QA_CONNECTION_STRING";
             // env = "DEV_CONNECTION_STRING";
             _connectionString = Environment.GetEnvironmentVariable(env);
 
@@ -50,6 +52,10 @@
             _client = new QueueClient(
                 _connectionString,
                 "error", ReceiveMode.PeekLock);
+
+            // Helper
+            var databaseConnectionString = Environment.GetEnvironmentVariable("DATABASE_CONNECTION_STRING");
+            _helper = new Helper(databaseConnectionString);
 
             _actions = new Dictionary<string, Func<Message, Task>>();
 
@@ -133,17 +139,20 @@
 
             string[] types =
             {
+                "Edrington.Contracts.Ecommerce.Events.ProductEnquiryMade, Edrington.Contracts.Ecommerce",
                 "Edrington.Data.Authentication.Events.AuthenticationUserDeleted, Edrington.Data",
+                "Edrington.Data.Consumer.Commands.CreateSkeletonContact, Edrington.Data",
                 "Edrington.Data.Consumer.Commands.EnterBallot, Edrington.Data",
                 "Edrington.Data.Consumer.Commands.UpdateCommunicationPreferences, Edrington.Data",
                 "Edrington.Data.Consumer.Events.ConsumerConsentPreferencesUpdated, Edrington.Data",
                 "Edrington.Data.Consumer.Events.ConsumerCrmPreferencesUpdated, Edrington.Data",
+                "Edrington.Data.Consumer.Events.ConsumerProfileUpdated, Edrington.Data",
                 "Edrington.Data.Consumer.Events.ConsumerVerifiedEmail, Edrington.Data",
+                // "Edrington.Data.Consumer.Events.ProductEnquiryMade, Edrington.Data",
                 "Edrington.Data.Consumer.Events.SignUpConsumerAccountIdentityCreated, Edrington.Data",
                 "Edrington.Data.Consumer.Events.SignUpConsumerAccountRequestExpired, Edrington.Data",
-                "Edrington.Data.MakeTheCut.Events.MakeTheCutAnswersUpdated, Edrington.Data"
-                // "Edrington.Data.Consumer.Events.ProductEnquiryMade, Edrington.Data",
-                // "Edrington.Data.Consumer.Commands.SendNewsletterSubscriptionRequested, Edrington.Data",
+                "Edrington.Data.MakeTheCut.Events.MakeTheCutAnswersUpdated, Edrington.Data",
+                "Edrington.Data.Consumer.Commands.SendNewsletterSubscriptionRequested, Edrington.Data",
                 // "Edrington.Data.Consumer.Commands.SynchroniseCrmPreferences, Edrington.Data",
                 // "Edrington.Data.Consumer.Commands.SynchroniseConsentPreferences, Edrington.Data",
                 // "Edrington.Data.Crm.Commands.AssociateConsentWithCrmAccount, Edrington.Data",
@@ -161,8 +170,81 @@
             var atUtc = json.GetValue("AtUtc").Value<DateTime>();
             var entityId = json.GetValue("EntityId").Value<string>();
 
+
+            var x = await _helper.IsInvalidConsumer(entityId);
+            Console.WriteLine(x);
+
             if (types.Length == 0 || types.Contains(type))
             {
+                // 1. Entity id is Consumer ID => delete if bad consumer id, otherwise replay
+                //   - ConsumerConsentPreferencesUpdated
+                //   - ConsumerProfileUpdated
+                //   - UpdateCommunicationPreferences
+                if (type == "Edrington.Data.Consumer.Events.ConsumerConsentPreferencesUpdated, Edrington.Data" 
+                    || type == "Edrington.Data.Consumer.Events.ConsumerProfileUpdated, Edrington.Data"
+                    || type == "Edrington.Data.Consumer.Commands.UpdateCommunicationPreferences, Edrington.Data")
+                {
+                    if (await _helper.IsInvalidConsumer(entityId))
+                    {
+                        Console.WriteLine($"## DELETING: Invalid consumer id: {entityId} ##");
+                        await _client.CompleteAsync(message.SystemProperties.LockToken);
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Return message {message.MessageId} to source for {entityId} and brand {brand}");
+                        await ReturnToSource(message);
+                    }
+                }
+
+                // 2. CreateSkeletonContact => just delete if Macallan, otherwise replay
+                if (type == "Edrington.Data.Consumer.Commands.CreateSkeletonContact, Edrington.Data")
+                {
+                    if (brand == 1)
+                    {
+                        Console.WriteLine($"## DELETING: CreateSkeletonContact for {entityId} not required for Macallan ##");
+                        await _client.CompleteAsync(message.SystemProperties.LockToken);
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Return message {message.MessageId} to source for {entityId} and brand {brand}");
+                        await ReturnToSource(message);
+                    }
+                }
+
+                // 3. ProductEnquiryMade
+                if (type == "Edrington.Contracts.Ecommerce.Events.ProductEnquiryMade, Edrington.Contracts.Ecommerce")
+                {
+                    var productCode=json.GetValue("ProductCode").Value<string>();
+                    if (productCode == "MAC552")
+                    {
+                        Console.WriteLine($"## DELETING: ProductEnquiryMade for {entityId} and product {productCode} ##");
+                        await _client.CompleteAsync(message.SystemProperties.LockToken);
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Return message {message.MessageId} to source for {entityId} and brand {brand}");
+                        await ReturnToSource(message);
+                    }
+                }
+
+                // 5. SendNewsletterSubscriptionRequested => drop if bot score negative 
+                if (type == "Edrington.Data.Consumer.Commands.SendNewsletterSubscriptionRequested, Edrington.Data")
+                {
+                    var botScore = json.GetValue("BotScore")?.Value<double>() ?? 0;
+                    if (botScore < 0)
+                    {
+                        Console.WriteLine($"## DELETING: SendNewsletterSubscriptionRequested for {entityId} with Bot score {botScore} ##");
+                        await _client.CompleteAsync(message.SystemProperties.LockToken);
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Return message {message.MessageId} to source for {entityId} with Bot score {botScore} and brand {brand}");
+                        await ReturnToSource(message); 
+                    }
+                }
+
+                /* ---------- EXISTING STUFF ---------- */
+
                 if (type == "Edrington.Data.Authentication.Events.AuthenticationUserDeleted, Edrington.Data")
                 {
                     if (atUtc > new DateTime(2023, 07, 24, 23, 59, 59))
@@ -243,18 +325,18 @@
                     }
                 }
 
-                if (type == "Edrington.Data.Consumer.Events.ConsumerConsentPreferencesUpdated, Edrington.Data" ||
-                     type == "Edrington.Data.Consumer.Events.ConsumerCrmPreferencesUpdated, Edrington.Data" ||
-                     type == "Edrington.Data.Consumer.Commands.UpdateCommunicationPreferences, Edrington.Data")
-                {
-                    Log($"{type}, {message.MessageId}, {atUtc}, {entityId}, {brand}, {DateTime.UtcNow}");
+                //if (type == "Edrington.Data.Consumer.Events.ConsumerConsentPreferencesUpdated, Edrington.Data" ||
+                //     type == "Edrington.Data.Consumer.Events.ConsumerCrmPreferencesUpdated, Edrington.Data" ||
+                //     type == "Edrington.Data.Consumer.Commands.UpdateCommunicationPreferences, Edrington.Data")
+                //{
+                //    Log($"{type}, {message.MessageId}, {atUtc}, {entityId}, {brand}, {DateTime.UtcNow}");
 
-                    Console.WriteLine("******");
-                    Console.WriteLine($"Return message {message.MessageId} to source for {entityId} and brand {brand}");
+                //    Console.WriteLine("******");
+                //    Console.WriteLine($"Return message {message.MessageId} to source for {entityId} and brand {brand}");
 
-                    await ReturnToSource(message);
-                    await Task.Delay(100, token);
-                }
+                //    await ReturnToSource(message);
+                //    await Task.Delay(100, token);
+                //}
 
                 // Delete this old message type 
                 if (type == "Edrington.Data.Consumer.Events.SignUpConsumerAccountRequestExpired, Edrington.Data")
