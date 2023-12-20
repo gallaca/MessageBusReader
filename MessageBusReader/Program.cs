@@ -10,7 +10,7 @@
     using Newtonsoft.Json;
     using Newtonsoft.Json.Linq;
     using Microsoft.Azure.ServiceBus;
-    using Microsoft.IdentityModel.Tokens;
+    using System.Text.Unicode;
 
     public class Program
     {
@@ -23,7 +23,7 @@
         private static long _sequenceNumber = 0;
         private static string _connectionString;
         private static Dictionary<string, Func<Message, Task>> _actions;
-        private static string _logFilename;
+        // ---     private static string _logFilename;
         private static IHelper _helper;
 
         private static DateTime _startDate = DateTime.UtcNow;
@@ -35,7 +35,7 @@
             DotEnv.Load(dotenv);
 
             // await InitLogger();
-            _logFilename = Path.Combine(root, $"{DateTime.UtcNow:yyyymmdd-HHmmss}.log");
+            // ---     _logFilename = Path.Combine(root, $"{DateTime.UtcNow:yyyymmdd-HHmmss}.log");
 
             MainAsync().GetAwaiter().GetResult();
         }
@@ -43,8 +43,8 @@
         static async Task MainAsync()
         {
             string env;
-            // env = "PRODUCTION_CONNECTION_STRING";
-             env = "QA_CONNECTION_STRING";
+            env = "PRODUCTION_CONNECTION_STRING";
+            // env = "QA_CONNECTION_STRING";
             // env = "DEV_CONNECTION_STRING";
             _connectionString = Environment.GetEnvironmentVariable(env);
 
@@ -139,27 +139,29 @@
 
             string[] types =
             {
-                "Edrington.Contracts.Ecommerce.Events.ProductEnquiryMade, Edrington.Contracts.Ecommerce",
-                "Edrington.Data.Authentication.Events.AuthenticationUserDeleted, Edrington.Data",
-                "Edrington.Data.Consumer.Commands.CreateSkeletonContact, Edrington.Data",
-                "Edrington.Data.Consumer.Commands.EnterBallot, Edrington.Data",
-                "Edrington.Data.Consumer.Commands.UpdateCommunicationPreferences, Edrington.Data",
-                "Edrington.Data.Consumer.Events.ConsumerConsentPreferencesUpdated, Edrington.Data",
+                //"Edrington.Data.Authentication.Events.AuthenticationUserDeleted, Edrington.Data",
+                //"Edrington.Data.Consumer.Commands.AssignConsumerRelationshipManager, Edrington.Data",
+                //"Edrington.Data.Consumer.Commands.CreateSkeletonContact, Edrington.Data",
+                //"Edrington.Data.Consumer.Commands.EnterBallot, Edrington.Data",
+                //"Edrington.Data.Consumer.Commands.UpdateCommunicationPreferences, Edrington.Data",
+                //"Edrington.Data.Consumer.Events.ConsumerConsentPreferencesUpdated, Edrington.Data",
                 "Edrington.Data.Consumer.Events.ConsumerCrmPreferencesUpdated, Edrington.Data",
-                "Edrington.Data.Consumer.Events.ConsumerProfileUpdated, Edrington.Data",
-                "Edrington.Data.Consumer.Events.ConsumerVerifiedEmail, Edrington.Data",
-                // "Edrington.Data.Consumer.Events.ProductEnquiryMade, Edrington.Data",
-                "Edrington.Data.Consumer.Events.SignUpConsumerAccountIdentityCreated, Edrington.Data",
-                "Edrington.Data.Consumer.Events.SignUpConsumerAccountRequestExpired, Edrington.Data",
-                "Edrington.Data.MakeTheCut.Events.MakeTheCutAnswersUpdated, Edrington.Data",
-                "Edrington.Data.Consumer.Commands.SendNewsletterSubscriptionRequested, Edrington.Data",
+                "Edrington.Data.Consumer.Commands.DeleteConsentManagementRecord, Edrington.Data",
+                //"Edrington.Data.Consumer.Events.ConsumerProfileUpdated, Edrington.Data",
+                //"Edrington.Data.Consumer.Events.ConsumerVerifiedEmail, Edrington.Data",
+                "Edrington.Data.Consumer.Events.ProductEnquiryMade, Edrington.Data",
+                //"Edrington.Data.Consumer.Events.SignUpConsumerAccountIdentityCreated, Edrington.Data",
+                //"Edrington.Data.Consumer.Events.SignUpConsumerAccountRequestExpired, Edrington.Data",
+                //"Edrington.Data.MakeTheCut.Events.MakeTheCutAnswersUpdated, Edrington.Data",
+                //"Edrington.Data.Consumer.Commands.SendNewsletterSubscriptionRequested, Edrington.Data",
                 // "Edrington.Data.Consumer.Commands.SynchroniseCrmPreferences, Edrington.Data",
-                // "Edrington.Data.Consumer.Commands.SynchroniseConsentPreferences, Edrington.Data",
+                "Edrington.Data.Consumer.Commands.SynchroniseConsentPreferences, Edrington.Data",
                 // "Edrington.Data.Crm.Commands.AssociateConsentWithCrmAccount, Edrington.Data",
                 // "Edrington.Data.Crm.Commands.CreateCrmContact, Edrington.Data",
                 // "Edrington.Data.Crm.Commands.SendConsentManagerIdToCrm, Edrington.Data",
-                // "Edrington.Data.Crm.Events.ConsentAssociatedWithCrmAccount, Edrington.Data",
-                // "Edrington.Data.Ecommerce.Events.ProductUpserted, Edrington.Data",
+                // "Edrington.Data.Crm.Events.ConsentAssociatedWithCrmAccount, Edrington.Data",                
+                "Edrington.Contracts.Ecommerce.Events.ProductInterestRegistered, Edrington.Contracts.Ecommerce",
+                "Edrington.Contracts.Ecommerce.Events.ProductUpserted, Edrington.Contracts.Ecommerce",
                 // "Edrington.Data.Order.Events.OrderRefreshFromShopDownloadedV2, Edrington.Data",
                 // "Edrington.Data.CrmBridge.Commands.SyncPurchase, Edrington.Data"
             };
@@ -169,24 +171,102 @@
             var brand = json.GetValue("Brand").Value<int>();
             var atUtc = json.GetValue("AtUtc").Value<DateTime>();
             var entityId = json.GetValue("EntityId").Value<string>();
-
-
-            var x = await _helper.IsInvalidConsumer(entityId);
-            Console.WriteLine(x);
+            var errorMessage = message.UserProperties["rbs2-error-details"] as string;
 
             if (types.Length == 0 || types.Contains(type))
             {
-                // 1. Entity id is Consumer ID => delete if bad consumer id, otherwise replay
-                //   - ConsumerConsentPreferencesUpdated
-                //   - ConsumerProfileUpdated
-                //   - UpdateCommunicationPreferences
-                if (type == "Edrington.Data.Consumer.Events.ConsumerConsentPreferencesUpdated, Edrington.Data" 
-                    || type == "Edrington.Data.Consumer.Events.ConsumerProfileUpdated, Edrington.Data"
-                    || type == "Edrington.Data.Consumer.Commands.UpdateCommunicationPreferences, Edrington.Data")
+                // A. ProductEnquiryMade - Delete all old Register Interest 
+                if (type == "Edrington.Data.Consumer.Events.ProductEnquiryMade, Edrington.Data")
                 {
-                    if (await _helper.IsInvalidConsumer(entityId))
+                    Console.WriteLine($"## DELETING: ProductEnquiryMade for {entityId} and product ##");
+                    await _client.CompleteAsync(message.SystemProperties.LockToken);
+                }
+
+                // B. Register Interest 
+                if (type == "Edrington.Contracts.Ecommerce.Events.ProductInterestRegistered, Edrington.Contracts.Ecommerce")
+                {
+                    Console.WriteLine($"Return 'Register Interest' message {message.MessageId} to source for {entityId} and brand {brand}");
+                    await ReturnToSource(message);
+                }
+
+                // C. ProductUpserted - patch code in to blank name
+                if (type == "Edrington.Contracts.Ecommerce.Events.ProductUpserted, Edrington.Contracts.Ecommerce")
+                {
+                    if (string.IsNullOrWhiteSpace(json.GetValue("ProductDisplayName").Value<string>()))
                     {
-                        Console.WriteLine($"## DELETING: Invalid consumer id: {entityId} ##");
+                        Console.WriteLine("Patch in product code for blank display name");
+                        string productCode = json.GetValue("ProductCode").Value<string>();
+                        var productDisplayNameProperty = json.Property("ProductDisplayName");
+                        productDisplayNameProperty.Value = JContainer.FromObject(productCode);
+                        message.Body = UTF8Encoding.UTF8.GetBytes(json.ToString(Formatting.None));
+                    }
+
+                    Console.WriteLine($"Return message {message.MessageId} to source for {entityId} and brand {brand}");
+                    await ReturnToSource(message);
+                }
+
+                // SynchroniseConsentPreferences
+                if (type == "Edrington.Data.Consumer.Commands.SynchroniseConsentPreferences, Edrington.Data")
+                {
+                    try
+                    {
+                        string consumerId = await _helper.GetConsumerId(brand, 9, entityId);
+                        Console.WriteLine($"Return message {message.MessageId} to source for {entityId} and brand {brand}");
+                        await ReturnToSource(message);
+
+                    }
+                    catch (ConsumerNotFoundException)
+                    {
+                        Console.WriteLine($"## DELETING: SynchroniseConsentPreferences message with invalid consent manager id ##");
+                        await _client.CompleteAsync(message.SystemProperties.LockToken);
+                    }
+                }
+
+                // PCRM
+                if (type == "Edrington.Data.Consumer.Commands.AssignConsumerRelationshipManager, Edrington.Data")
+                {
+                    if (errorMessage.Contains("Status (429) Too Many Requests for"))
+                    {
+                        Console.WriteLine($"Return message {message.MessageId} to source for {entityId} - original error was '(429) Too many requests'");
+                        await ReturnToSource(message);
+                    }
+                    else
+                    {
+                        Log(message);
+                    }
+                }
+
+                // ConsumerCrmPreferencesUpdated
+                if (type == "Edrington.Data.Consumer.Events.ConsumerCrmPreferencesUpdated, Edrington.Data")
+                {
+                    if (errorMessage.Contains("Violation of UNIQUE KEY constraint 'CK_BrandLocalIdentity_Id'"))
+                    {
+                        if (entityId.Contains("@"))
+                        {
+                            string consumerId = await _helper.GetConsumerId(brand, 1, entityId);
+                            var entityIdProperty = json.Property("EntityId");
+                            entityIdProperty.Value = JContainer.FromObject(consumerId);
+                            message.Body = UTF8Encoding.UTF8.GetBytes(json.ToString(Formatting.None));
+                            await ReturnToSource(message);
+                        }
+                        else
+                        {
+                            Log(message);
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Return message {message.MessageId} to source for {entityId} and brand {brand}");
+                        await ReturnToSource(message);
+                    }
+                }
+
+                // DeleteConsentManagementRecord
+                if (type == "Edrington.Data.Consumer.Commands.DeleteConsentManagementRecord, Edrington.Data")
+                {
+                    if (string.IsNullOrEmpty(entityId))
+                    {
+                        Console.WriteLine($"## DELETING: DeleteConsentManagementRecord message with no entity id ##");
                         await _client.CompleteAsync(message.SystemProperties.LockToken);
                     }
                     else
@@ -196,7 +276,47 @@
                     }
                 }
 
-                // 2. CreateSkeletonContact => just delete if Macallan, otherwise replay
+                // 1. AuthenticationUserDeleted
+                if (type == "Edrington.Data.Authentication.Events.AuthenticationUserDeleted, Edrington.Data")
+                {
+                    if (errorMessage.Contains("System.AggregateException: 5 unhandled exceptions (Status (404) Not Found for PATCH https://api.hubapi.com/crm/v3/objects/contact") && errorMessage.Contains("_DELETED_"))
+                    {
+                        Console.WriteLine($"## DELETING: Consumer identity has been invalidated for {entityId} ##");
+                        await _client.CompleteAsync(message.SystemProperties.LockToken);
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Return message {message.MessageId} to source for {entityId} and brand {brand}");
+                        await ReturnToSource(message);
+                    }
+                }
+
+                // 2. Entity id is Consumer ID => delete if bad consumer id, otherwise replay
+                //   - ConsumerConsentPreferencesUpdated
+                //   - ConsumerProfileUpdated
+                //   - UpdateCommunicationPreferences
+                if (type == "Edrington.Data.Consumer.Events.ConsumerConsentPreferencesUpdated, Edrington.Data"
+                    || type == "Edrington.Data.Consumer.Events.ConsumerProfileUpdated, Edrington.Data"
+                    || type == "Edrington.Data.Consumer.Commands.UpdateCommunicationPreferences, Edrington.Data"
+                    || type == "Edrington.Data.Consumer.Events.ConsumerVerifiedEmail, Edrington.Data")
+                {
+                    if (await _helper.IsInvalidConsumer(entityId))
+                    {
+                        Console.WriteLine($"## DELETING: Invalid consumer id: {entityId} ##");
+                        await _client.CompleteAsync(message.SystemProperties.LockToken);
+                    }
+                    else if (errorMessage.Contains("Violation of UNIQUE KEY constraint 'CK_BrandLocalIdentity_Id'"))
+                    {
+                        Log(message);
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Return message {message.MessageId} to source for {entityId} and brand {brand}");
+                        await ReturnToSource(message);
+                    }
+                }
+
+                // 3. CreateSkeletonContact => just delete if Macallan, otherwise replay
                 if (type == "Edrington.Data.Consumer.Commands.CreateSkeletonContact, Edrington.Data")
                 {
                     if (brand == 1)
@@ -211,26 +331,13 @@
                     }
                 }
 
-                // 3. ProductEnquiryMade
-                if (type == "Edrington.Contracts.Ecommerce.Events.ProductEnquiryMade, Edrington.Contracts.Ecommerce")
-                {
-                    var productCode=json.GetValue("ProductCode").Value<string>();
-                    if (productCode == "MAC552")
-                    {
-                        Console.WriteLine($"## DELETING: ProductEnquiryMade for {entityId} and product {productCode} ##");
-                        await _client.CompleteAsync(message.SystemProperties.LockToken);
-                    }
-                    else
-                    {
-                        Console.WriteLine($"Return message {message.MessageId} to source for {entityId} and brand {brand}");
-                        await ReturnToSource(message);
-                    }
-                }
+
 
                 // 5. SendNewsletterSubscriptionRequested => drop if bot score negative 
                 if (type == "Edrington.Data.Consumer.Commands.SendNewsletterSubscriptionRequested, Edrington.Data")
                 {
-                    var botScore = json.GetValue("BotScore")?.Value<double>() ?? 0;
+                    var botScoreToken = json.SelectToken("BotScore")?.Value<string>() ?? string.Empty;
+                    var botScore = string.IsNullOrWhiteSpace(botScoreToken) ? 0 : double.Parse(botScoreToken);
                     if (botScore < 0)
                     {
                         Console.WriteLine($"## DELETING: SendNewsletterSubscriptionRequested for {entityId} with Bot score {botScore} ##");
@@ -239,45 +346,33 @@
                     else
                     {
                         Console.WriteLine($"Return message {message.MessageId} to source for {entityId} with Bot score {botScore} and brand {brand}");
-                        await ReturnToSource(message); 
+                        await ReturnToSource(message);
                     }
                 }
 
                 /* ---------- EXISTING STUFF ---------- */
 
-                if (type == "Edrington.Data.Authentication.Events.AuthenticationUserDeleted, Edrington.Data")
-                {
-                    if (atUtc > new DateTime(2023, 07, 24, 23, 59, 59))
-                    {
-                        Console.WriteLine("*** FOUND NEW AuthenticationUserDeleted PROBLEM!");
-                    }
-                    else
-                    {
-                        await _client.CompleteAsync(message.SystemProperties.LockToken);
-                        Console.WriteLine("## DELETED ##");
-                    }
-                }
 
-                if (type == "Edrington.Data.Consumer.Events.ConsumerVerifiedEmail, Edrington.Data")
-                {
-                    Log($"{type}, {message.MessageId}, {atUtc}, {entityId}, {brand}, {DateTime.UtcNow}");
-                    Console.WriteLine("******");
+                //if (type == "Edrington.Data.Consumer.Events.ConsumerVerifiedEmail, Edrington.Data")
+                //{
+                //    Log($"{type}, {message.MessageId}, {atUtc}, {entityId}, {brand}, {DateTime.UtcNow}");
+                //    Console.WriteLine("******");
 
-                    var sourceQueue = message.UserProperties["rbs2-source-queue"] as string;
+                //    var sourceQueue = message.UserProperties["rbs2-source-queue"] as string;
 
-                    if (sourceQueue == "marketingemailprovider")
-                    {
-                        Console.WriteLine($"Send message {message.MessageId} to `crmprovider` for {entityId} and brand {brand}");
-                        await RedirectToQueue(message, "crmprovider");
-                    }
-                    else
-                    {
-                        Console.WriteLine($"Return message {message.MessageId} to source for {entityId} and brand {brand}");
-                        await ReturnToSource(message);
-                    }
+                //    if (sourceQueue == "marketingemailprovider")
+                //    {
+                //        Console.WriteLine($"Send message {message.MessageId} to `crmprovider` for {entityId} and brand {brand}");
+                //        await RedirectToQueue(message, "crmprovider");
+                //    }
+                //    else
+                //    {
+                //        Console.WriteLine($"Return message {message.MessageId} to source for {entityId} and brand {brand}");
+                //        await ReturnToSource(message);
+                //    }
 
-                    await Task.Delay(50, token);
-                }
+                //    await Task.Delay(50, token);
+                //}
 
                 if (type == "Edrington.Data.MakeTheCut.Events.MakeTheCutAnswersUpdated, Edrington.Data")
                 {
@@ -311,12 +406,16 @@
 
                             await _client.CompleteAsync(message.SystemProperties.LockToken);
                         }
+                        else
+                        {
+                            Console.WriteLine($"Return message {message.MessageId} to source for {entityId} and brand {brand}");
+                            await ReturnToSource(message);
+                        }
                     }
                 }
 
                 if (type == "Edrington.Data.Consumer.Commands.EnterBallot, Edrington.Data")
                 {
-                    var errorMessage = message.UserProperties["rbs2-error-details"] as string;
                     var botScore = json.GetValue("BotScore").Value<double>();
 
                     if (errorMessage.Contains("Ballot criteria not met") || botScore < 0.3)
@@ -347,7 +446,6 @@
 
                 if (type == "Edrington.Data.Consumer.Events.SignUpConsumerAccountIdentityCreated, Edrington.Data")
                 {
-                    var errorMessage = message.UserProperties["rbs2-error-details"] as string;
                     if (errorMessage.Contains("The added or subtracted value results in an un-representable DateTime"))
                     {
                         await _client.CompleteAsync(message.SystemProperties.LockToken);
@@ -503,9 +601,18 @@
             return Task.CompletedTask;
         }
 
-        private static void Log(string message)
+        private static void Log(Message message)
         {
-            File.AppendAllLines(_logFilename, new List<string> { message });
+            var body = Encoding.UTF8.GetString(message.Body);
+            var json = JObject.Parse(body);
+
+            var filename = Path.Combine(@"C:\Users\agallacher\OneDrive - Edrington\Documents\Support\error-queue", $"{message.MessageId}.txt");
+            File.WriteAllText(filename, json.ToString(formatting: Formatting.Indented));
+
+            File.AppendAllText(filename, "\n----------\n");
+
+            var errorMessage = message.UserProperties["rbs2-error-details"] as string;
+            File.AppendAllText(filename, errorMessage);
         }
     }
 
