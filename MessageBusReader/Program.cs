@@ -8,6 +8,7 @@
     using Newtonsoft.Json.Linq;
     using Azure.Messaging.ServiceBus;
     using System.Threading;
+    using System.IO;
 
     class Program
     {
@@ -25,10 +26,20 @@
 
         static async Task Main(string[] args)
         {
-            // Connect to error queue
-            _client = new ServiceBusClient("## SERVICE BUS CONNECTION STRING ##");
+            var root = Directory.GetCurrentDirectory();
+            var dotenv = Path.Combine(root, ".env");
+            DotEnv.Load(dotenv);
 
-            //await MainAsync();
+            string env;
+            env = "PRODUCTION_CONNECTION_STRING";
+            // env = "QA_CONNECTION_STRING";
+            // env = "DEV_CONNECTION_STRING";
+            var connectionString = Environment.GetEnvironmentVariable(env);
+
+            // Connect to error queue
+            _client = new ServiceBusClient(connectionString);
+
+          //  await MainAsync();
 
             // Switch to this to move deadletter back to the error queue
             await MoveDeadletter();
@@ -63,6 +74,11 @@
         private static async Task ProcessMessagesAsync(ProcessMessageEventArgs args)
         {
             ServiceBusReceivedMessage message = args.Message;
+            var body = Encoding.UTF8.GetString(message.Body);
+            var json = JObject.Parse(body);
+
+            var logFilePath = @"C:\Users\agallacher\OneDrive - Edrington\Documents\Support\bot-attack-february-2024";
+            var logFilename = Path.Combine(logFilePath, "Log.txt");
 
             _messageCount = Interlocked.Increment(ref _messageCount);
 
@@ -77,37 +93,26 @@
             string type = typeValue.ToString();
 
             // Handling based on error
-            //if (type == "Edrington.Contracts.Ecommerce.Events.ProductUpserted, Edrington.Contracts.Ecommerce")
-            //{
-            //    if (message.ContainsError("Status (429)"))
-            //    {
-            //        await ReturnToSource(args, _delay);
-            //        _delay++;
-            //        return;
-            //    }
+            if (type == "Edrington.Contracts.Ecommerce.Events.ProductInterestRegistered, Edrington.Contracts.Ecommerce")
+            {
+                var botScore = json.GetValue("BotScore").Value<double>();
+                if (botScore < 0.4)
+                {
+                    await CompleteMessage(args);
+                    return;
+                }
 
-            //    if (message.ContainsError("Status (400)"))
-            //    {
-            //        string error = message.GetErrorMessage();
-            //        int start = error.IndexOf("For the property ");
+                await ReturnToSource(args, _delay);
+                _delay++;
+                return;
+            }
 
-            //        if (start < 1)
-            //        {
-            //            return;
-            //        }
-
-            //        int end = error.IndexOf("\"", start);
-            //        string interestingPart = error.Substring(start, end - start);
-
-            //        File.AppendAllText("hubspot_errors.txt", interestingPart + "\r\n");
-            //        await CompleteMessage(args);
-            //        return;
-            //    }
-            //}
-
+            // These are the messages we are going to remove from the queue without doing anything
             string[] completeTypes =
             {
-                // "Edrington.Contracts.Ecommerce.Events.ProductUpserted, Edrington.Contracts.Ecommerce"
+                "Edrington.Data.CrmBridge.Commands.SyncEventDeal, Edrington.Data",
+                "Edrington.Data.CrmBridge.Commands.SyncPurchase, Edrington.Data",
+                "Edrington.Data.CrmBridge.Commands.SyncPurchases, Edrington.Data"
             };
 
             if (completeTypes.Contains(type))
@@ -116,9 +121,12 @@
                 return;
             }
 
+            // These are the messages we are going to try to replay 
             string[] returnTypes =
             {
-                // "Edrington.Contracts.Ecommerce.Events.ProductUpserted, Edrington.Contracts.Ecommerce"
+                "Edrington.Data.Consumer.Events.ConsumerProfileUpdated, Edrington.Data",
+                "Edrington.Data.Consumer.Commands.AccountSignUpForSubscriberRequested, Edrington.Data",
+                "Edrington.Data.Consumer.Events.ConsumerVerifiedEmail, Edrington.Data"
             };
 
             if (returnTypes.Contains(type))
@@ -128,19 +136,24 @@
                 return;
             }
 
-            string[] skipTypes = new string[]
+            // Capture 404 for... 
+            if (type == "Edrington.Data.Order.Events.OrderRefreshFromShopDownloadedV2, Edrington.Data")
             {
-                // "Edrington.Data.Consumer.Commands.DeleteConsentManagementRecord, Edrington.Data",
-                // "Edrington.Data.Consumer.Events.ConsumerCrmPreferencesUpdated, Edrington.Data"
-            };
+                if (message.ContainsError("Request to the Product API v2 failed with unsuccessful status code 404"))
+                {
+                    var errorMessage = message.GetErrorMessage();
+                    var startOfInterestingBit = errorMessage.IndexOf("Url: https://api.edrington.com");
+                    var endOfInterestingBit = errorMessage.IndexOf(")");
+                    var interestingBit = errorMessage.Substring(startOfInterestingBit, endOfInterestingBit - startOfInterestingBit + 1);
 
-            if (skipTypes.Contains(type))
-            {
-                await args.DeadLetterMessageAsync(args.Message);
-                return;
+                    File.AppendAllText(logFilename, interestingBit);
+                    File.AppendAllText(logFilename, "\n");
+                }
             }
 
-            Console.WriteLine("Unhandled type: " + type);
+            // And we move anything else to DLQ
+            await args.DeadLetterMessageAsync(args.Message);
+            return;
         }
 
         static async Task MoveDeadletter()
@@ -215,7 +228,7 @@
                 Console.WriteLine("Message does not have a source queue property");
                 return;
             }
-            
+
             var copy = new ServiceBusMessage(args.Message);
 
             await ReturnToQueue(copy, source, delay);
