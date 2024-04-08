@@ -39,7 +39,7 @@
             // Connect to error queue
             _client = new ServiceBusClient(connectionString);
 
-          //  await MainAsync();
+            // await MainAsync();
 
             // Switch to this to move deadletter back to the error queue
             await MoveDeadletter();
@@ -58,6 +58,7 @@
 
             _processor.ProcessMessageAsync += ProcessMessagesAsync;
             _processor.ProcessErrorAsync += ExceptionReceivedHandler;
+            await  _processor.StopProcessingAsync();
 
             _taskCompletionSource = new TaskCompletionSource<int>();
             _loopTask = _taskCompletionSource.Task;
@@ -73,12 +74,24 @@
 
         private static async Task ProcessMessagesAsync(ProcessMessageEventArgs args)
         {
-            ServiceBusReceivedMessage message = args.Message;
-            var body = Encoding.UTF8.GetString(message.Body);
-            var json = JObject.Parse(body);
-
             var logFilePath = @"C:\Users\agallacher\OneDrive - Edrington\Documents\Support\bot-attack-february-2024";
             var logFilename = Path.Combine(logFilePath, "Log.txt");
+            var errorFilename = Path.Combine(logFilePath, "Errors.txt");
+
+            ServiceBusReceivedMessage message = args.Message;
+            var body = Encoding.UTF8.GetString(message.Body);
+            JObject json;
+
+            try
+            {
+                json = JObject.Parse(body);
+            }
+            catch (Exception)
+            {
+                File.AppendAllText(errorFilename, args.Message.Subject);
+                File.AppendAllText(errorFilename, "\n");
+                throw;
+            } 
 
             _messageCount = Interlocked.Increment(ref _messageCount);
 
@@ -92,7 +105,59 @@
 
             string type = typeValue.ToString();
 
-            // Handling based on error
+            // SynchroniseConsentPreferences
+            if (type == "Edrington.Data.Consumer.Commands.SynchroniseConsentPreferences, Edrington.Data")
+            {
+                if (message.ContainsError("Unable to find consumer for consent manager id"))
+                {
+                    await CompleteMessage(args);
+                    return;
+                }
+            }
+
+            // ShopProductIdentityUpserted
+            if (type == "Edrington.Contracts.Ecommerce.Events.ShopProductIdentityUpserted, Edrington.Contracts.Ecommerce")
+            {
+                var brand = json.GetValue("brand").Value<int>();
+
+                if (brand == 1)
+                {
+                    // Don't need this for Macallan any more 
+                    await CompleteMessage(args);
+                    return;
+                }
+            }
+
+            // CreateSkeletonContact
+            if (type == "Edrington.Data.Consumer.Commands.CreateSkeletonContact, Edrington.Data")
+            {
+                var brand = json.GetValue("brand").Value<int>();
+
+                if (brand == 1)
+                {
+                    await CompleteMessage(args);
+                    return;
+                }
+
+                if (message.ContainsError("Invalid email for contact"))
+                {
+                    await CompleteMessage(args);
+                    return;
+                }
+            }
+
+            // DeleteConsentManagementRecord
+            if (type == "Edrington.Data.Consumer.Commands.DeleteConsentManagementRecord, Edrington.Data")
+            {
+                if (message.ContainsError("Status Code: GatewayTimeout"))
+                {
+                    await ReturnToSource(args, _delay);
+                    _delay++;
+                    return;
+                }
+            }
+
+            // ProductInterestRegistered (bots) 
             if (type == "Edrington.Contracts.Ecommerce.Events.ProductInterestRegistered, Edrington.Contracts.Ecommerce")
             {
                 var botScore = json.GetValue("BotScore").Value<double>();
@@ -102,6 +167,29 @@
                     return;
                 }
 
+                await ReturnToSource(args, _delay);
+                _delay++;
+                return;
+            }
+
+            // AuthenticationUserDeleted - identity deleted
+            if (type == "Edrington.Data.Authentication.Events.AuthenticationUserDeleted, Edrington.Data")
+            {
+                if (message.ContainsError("Status (404)") && message.ContainsError("_DELETED_"))
+                {
+                    // delete
+                    await CompleteMessage(args);
+                    return;
+                }
+
+                await ReturnToSource(args, _delay);
+                _delay++;
+                return;
+            }
+
+            // 429s - let's try again
+            if (message.ContainsError("Status (429) Too Many Requests"))
+            {
                 await ReturnToSource(args, _delay);
                 _delay++;
                 return;
@@ -124,9 +212,11 @@
             // These are the messages we are going to try to replay 
             string[] returnTypes =
             {
-                "Edrington.Data.Consumer.Events.ConsumerProfileUpdated, Edrington.Data",
                 "Edrington.Data.Consumer.Commands.AccountSignUpForSubscriberRequested, Edrington.Data",
-                "Edrington.Data.Consumer.Events.ConsumerVerifiedEmail, Edrington.Data"
+                "Edrington.Data.Consumer.Commands.MarkConsumerEmailVerified, Edrington.Data",
+                "Edrington.Data.Consumer.Events.ConsumerProfileUpdated, Edrington.Data",
+                "Edrington.Data.Consumer.Events.ConsumerVerifiedEmail, Edrington.Data",
+                "Edrington.Data.ProductInventoryAlert.Events.PurchaseObjectInserted, Edrington.Data"
             };
 
             if (returnTypes.Contains(type))
