@@ -58,7 +58,6 @@
 
             _processor.ProcessMessageAsync += ProcessMessagesAsync;
             _processor.ProcessErrorAsync += ExceptionReceivedHandler;
-            await  _processor.StopProcessingAsync();
 
             _taskCompletionSource = new TaskCompletionSource<int>();
             _loopTask = _taskCompletionSource.Task;
@@ -74,7 +73,8 @@
 
         private static async Task ProcessMessagesAsync(ProcessMessageEventArgs args)
         {
-            var logFilePath = @"C:\Users\agallacher\OneDrive - Edrington\Documents\Support\bot-attack-february-2024";
+            // TODO: Let's get a more general location for any log files.
+            var logFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "OneDrive - Edrington", "Documents", "Support\bot-attack-february-2024");
             var logFilename = Path.Combine(logFilePath, "Log.txt");
             var errorFilename = Path.Combine(logFilePath, "Errors.txt");
 
@@ -91,7 +91,7 @@
                 File.AppendAllText(errorFilename, args.Message.Subject);
                 File.AppendAllText(errorFilename, "\n");
                 throw;
-            } 
+            }
 
             _messageCount = Interlocked.Increment(ref _messageCount);
 
