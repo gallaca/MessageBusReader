@@ -310,7 +310,7 @@ namespace MessageBusReader
             await CompleteMessage(args);
         }
 
-        private static async Task CompleteMessage(ProcessMessageEventArgs args)
+        public static async Task CompleteMessage(ProcessMessageEventArgs args)
         {
             await args.CompleteMessageAsync(args.Message);
 
@@ -326,7 +326,7 @@ namespace MessageBusReader
             await ReturnToSource(args, 0);
         }
 
-        private static async Task ReturnToSource(ProcessMessageEventArgs args, int delay)
+        public static async Task ReturnToSource(ProcessMessageEventArgs args, int delay)
         {
             string source = GetSource(args);
 

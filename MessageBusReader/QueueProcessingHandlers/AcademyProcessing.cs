@@ -11,6 +11,7 @@ public class AcademyProcessing
 {
     private static int _messageCount = 0;
     private static List<string> _foundTypes = new List<string>();
+    private static int _delay = 0;
 
     public static async Task ProcessAcademyDeadletterAsync(ProcessMessageEventArgs args)
     {
@@ -101,7 +102,7 @@ public class AcademyProcessing
         if (message.ContainsError("VALIDATION_ERROR"))
         {
             Console.WriteLine($"Found validation error: {message}");
-            await ReturnToSource(args, _delay);
+            await Program.ReturnToSource(args, _delay);
             _delay++;
             return;
         }
@@ -109,7 +110,7 @@ public class AcademyProcessing
         if (message.ContainsError("Object reference not set to an instance of an object"))
         {
             Console.WriteLine($"Found missing user error: {message}");
-            await ReturnToSource(args, _delay);
+            await Program.ReturnToSource(args, _delay);
             _delay++;
             return;
         }
@@ -126,7 +127,7 @@ public class AcademyProcessing
         if (removeMessageIds.Contains(message.MessageId))
         {
             Console.WriteLine($"Removing message.");
-            // await CompleteMessage(args);
+            await Program.CompleteMessage(args);
             return;
         }
 
