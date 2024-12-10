@@ -113,17 +113,6 @@ namespace MessageBusReader
 
             string type = typeValue.ToString();
 
-            // Academy class/chapter create race condition.
-            if (type == "Edrington.Academy.Contracts.Events.AcademyCourseInteracted, Edrington.Academy.Contracts")
-            {
-                if (message.ContainsError("VALIDATION_ERROR"))
-                {
-                    await ReturnToSource(args, _delay);
-                    _delay++;
-                    return;
-                }
-            }
-
             // SynchroniseConsentPreferences
             if (type == "Edrington.Data.Consumer.Commands.SynchroniseConsentPreferences, Edrington.Data")
             {
