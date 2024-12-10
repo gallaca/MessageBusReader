@@ -1,4 +1,6 @@
-﻿namespace MessageBusReader
+﻿using MessageBusReader.QueueProcessingHandlers;
+
+namespace MessageBusReader
 {
     using System;
     using System.Collections.Generic;
@@ -15,7 +17,12 @@
         private static ServiceBusClient _client;
         private static ServiceBusProcessor _processor;
 
+        // Customise your operational params.
         private const string QueueName = "error";
+        private const string Env = "DEV_CONNECTION_STRING";
+
+        // Default handler unless overridden in Main.
+        private static Func<ProcessMessageEventArgs, Task> _messageHandler = ProcessMessagesAsync;
 
         private static TaskCompletionSource<int> _taskCompletionSource;
         private static Task<int> _loopTask;
@@ -32,15 +39,14 @@
             var dotenv = Path.Combine(root, ".env");
             DotEnv.Load(dotenv);
 
-            string env;
-            env = "PRODUCTION_CONNECTION_STRING";
-            // env = "QA_CONNECTION_STRING";
-            // env = "DEV_CONNECTION_STRING";
-            var connectionString = Environment.GetEnvironmentVariable(env);
+            var connectionString = Environment.GetEnvironmentVariable(Env);
 
             // Connect to error queue
             _client = new ServiceBusClient(connectionString);
 
+            // _messageHandler = AcademyProcessing.ProcessAcademyMessagesAsync;
+            // _messageHandler = AcademyProcessing.ProcessAcademyDeadletterAsync;
+            // _messageHandler = AcademyProcessing.ProcessCheckTypesAsync;
             // await MainAsync();
 
             // Switch to this to move deadletter back to the error queue
@@ -58,7 +64,7 @@
 
             _processor = _client.CreateProcessor(QueueName, options);
 
-            _processor.ProcessMessageAsync += ProcessMessagesAsync;
+            _processor.ProcessMessageAsync += _messageHandler;
             _processor.ProcessErrorAsync += ExceptionReceivedHandler;
 
             _taskCompletionSource = new TaskCompletionSource<int>();
