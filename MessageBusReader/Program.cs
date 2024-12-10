@@ -15,6 +15,8 @@
         private static ServiceBusClient _client;
         private static ServiceBusProcessor _processor;
 
+        private const string QueueName = "error";
+
         private static TaskCompletionSource<int> _taskCompletionSource;
         private static Task<int> _loopTask;
         private static int _completeCounter = 0;
@@ -54,7 +56,7 @@
                 ReceiveMode = ServiceBusReceiveMode.PeekLock,
             };
 
-            _processor = _client.CreateProcessor("error", options);
+            _processor = _client.CreateProcessor(QueueName, options);
 
             _processor.ProcessMessageAsync += ProcessMessagesAsync;
             _processor.ProcessErrorAsync += ExceptionReceivedHandler;
@@ -104,6 +106,17 @@
             }
 
             string type = typeValue.ToString();
+
+            // Academy class/chapter create race condition.
+            if (type == "Edrington.Academy.Contracts.Events.AcademyCourseInteracted, Edrington.Academy.Contracts")
+            {
+                if (message.ContainsError("VALIDATION_ERROR"))
+                {
+                    await ReturnToSource(args, _delay);
+                    _delay++;
+                    return;
+                }
+            }
 
             // SynchroniseConsentPreferences
             if (type == "Edrington.Data.Consumer.Commands.SynchroniseConsentPreferences, Edrington.Data")
@@ -256,11 +269,9 @@
                 SubQueue = SubQueue.DeadLetter
             };
 
-            string queueName = "error";
+            _processor = _client.CreateProcessor(QueueName, options);
 
-            _processor = _client.CreateProcessor(queueName, options);
-
-            _processor.ProcessMessageAsync += args => ReturnDeadletterAsync(args, queueName);
+            _processor.ProcessMessageAsync += args => ReturnDeadletterAsync(args, QueueName);
             _processor.ProcessErrorAsync += ExceptionReceivedHandler;
 
             _taskCompletionSource = new TaskCompletionSource<int>();
